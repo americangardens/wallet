@@ -308,7 +308,7 @@ function money(value, currency) {
 
 function getStatus(state) {
   if (state.balance < 0) return { key: 'debt', label: 'Долг', tone: 'danger' };
-  if (state.balance < state.living_wage) return { key: 'critical', label: 'Ниже прожиточного', tone: 'warn' };
+  if (state.balance < state.living_wage) return { key: 'critical', label: 'Ниже минимума', tone: 'warn' };
   if (state.balance < state.living_wage * 2) return { key: 'thin', label: 'Тонкий запас', tone: 'mid' };
   return { key: 'stable', label: 'Стабильно', tone: 'ok' };
 }
