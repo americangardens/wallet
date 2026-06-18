@@ -21,6 +21,7 @@ const DEFAULT_STATE = Object.freeze({
   expenses: [],
   income: [],
   note: '',
+  initialized: false,
   appliedUpdates: [],
   debugLog: [],
 });
@@ -159,6 +160,7 @@ function getState() {
   if (!Array.isArray(state.income)) state.income = [];
   if (!Array.isArray(state.appliedUpdates)) state.appliedUpdates = [];
   if (!Array.isArray(state.debugLog)) state.debugLog = [];
+  state.initialized = state.initialized === true;
   state.balance = numberOr(state.balance, 0);
   state.living_wage = numberOr(state.living_wage, 1000);
   state.currency = String(state.currency || '$');
@@ -207,6 +209,7 @@ function normalizeWallet(raw) {
       icon: String(item.icon || '+').slice(0, 8),
     })) : [],
     note: String(source.note || '').slice(0, 320),
+    initialized: true,
   };
 }
 
@@ -254,6 +257,7 @@ function mergeWalletState(target, update) {
   target.expenses = update.expenses;
   target.income = update.income;
   target.note = update.note;
+  target.initialized = true;
 }
 
 async function processIncomingMessage(data) {
@@ -305,6 +309,7 @@ async function processIncomingMessage(data) {
 function buildPrompt() {
   const settings = getSettings();
   const state = getState();
+  const hasEstablishedWallet = state.initialized === true;
   const languageRule = settings.language === 'ru'
     ? 'Use Russian for all human-readable text fields.'
     : settings.language === 'en'
@@ -319,12 +324,15 @@ function buildPrompt() {
     income: state.income,
     note: state.note,
   });
+  const stateInstruction = hasEstablishedWallet
+    ? `Current established character wallet state: ${stateJson}`
+    : `No established character wallet exists yet. Draft/default state, if any: ${stateJson}. Initialize the wallet from {{char}}'s character card, scenario, personality, active lore/world info, and visible chat context before applying the latest scene events.`;
 
   return [
     '[Character Wallet Strict]',
     'You maintain the personal wallet of {{char}} only. This is NOT {{user}}\'s wallet.',
     `${languageRule} Currency must match the story setting, not the UI language.`,
-    `Current character wallet state: ${stateJson}`,
+    stateInstruction,
     'After every assistant reply, append exactly one compact JSON object inside this tag at the very end:',
     '<char_wallet_state><!-- {"owner":"{{char}}","balance":0,"currency":"$","living_wage":1000,"expenses":[],"income":[],"note":""} --></char_wallet_state>',
     'Required JSON keys: owner, balance, currency, living_wage, expenses, income, note.',
@@ -334,6 +342,9 @@ function buildPrompt() {
     'If {{user}} buys something with {{user}}\'s own money, do not update the character wallet. If {{char}} pays, earns, borrows, lends, receives a gift, gets robbed, owes a debt, pays rent, or has recurring obligations, update the wallet.',
     'Infer {{char}}\'s financial class, income sources, obligations, and spending habits from the roleplay and setting instead of forcing a fixed lifestyle template.',
     'Use only financial sources and obligations that are supported by the character card, chat history, current scene, or setting logic.',
+    'On first initialization, choose a plausible liquid balance/cash reserve for {{char}}. Do not start from 0 unless the lore implies poverty, debt, or no access to money.',
+    'For wealthy, high-status, business-owning, royal, celebrity, executive, or otherwise resource-rich characters, initialize and maintain a balance appropriate to their accessible spending money, not their total net worth.',
+    'If a previous draft/default wallet contradicts clear lore (for example a wealthy character going negative after ordinary luxury spending), correct the wallet to a plausible balance and explain the correction briefly in note.',
     'For high-status or wealthy characters, scale income, reserves, gifts, staff, property upkeep, luxury purchases, and recurring obligations realistically when the story supports it.',
     'If {{char}} buys {{user}} a gift, pays for a date, purchases jewelry, covers a bill, or spends money to impress/protect/control someone, subtract it from {{char}}\'s balance and add/update an expense item.',
     'Keep recurring obligations unless the story explicitly ends them. Increase overdue_days and penalty when unpaid recurring expenses are neglected.',
