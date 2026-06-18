@@ -206,6 +206,7 @@ function normalizeWallet(raw) {
       name: String(item.name || '?').slice(0, 90),
       amount: numberOr(item.amount, 0),
       received: item.received !== false,
+      recurring: item.recurring === true,
       icon: String(item.icon || '+').slice(0, 8),
     })) : [],
     note: String(source.note || '').slice(0, 320),
@@ -337,12 +338,16 @@ function buildPrompt() {
     '<char_wallet_state><!-- {"owner":"{{char}}","balance":0,"currency":"$","living_wage":1000,"expenses":[],"income":[],"note":""} --></char_wallet_state>',
     'Required JSON keys: owner, balance, currency, living_wage, expenses, income, note.',
     'Expense item keys: id, name, amount, paid, overdue_days, penalty, recurring, icon.',
-    'Income item keys: id, name, amount, received, icon.',
+    'Income item keys: id, name, amount, received, recurring, icon.',
     'Track only money that belongs to, is owed by, is owed to, is paid by, or is received by {{char}}.',
     'If {{user}} buys something with {{user}}\'s own money, do not update the character wallet. If {{char}} pays, earns, borrows, lends, receives a gift, gets robbed, owes a debt, pays rent, or has recurring obligations, update the wallet.',
     'Infer {{char}}\'s financial class, income sources, obligations, and spending habits from the roleplay and setting instead of forcing a fixed lifestyle template.',
     'Use only financial sources and obligations that are supported by the character card, chat history, current scene, or setting logic.',
     'On first initialization, choose a plausible liquid balance/cash reserve for {{char}}. Do not start from 0 unless the lore implies poverty, debt, or no access to money.',
+    'On first initialization, also create a compact baseline cashflow profile from the lore: expected recurring income and mandatory recurring expenses that exist outside the current scene.',
+    'Examples: salary, private practice, clinic/business revenue, royalties, rent income, allowance, investments, staff payroll, rent/mortgage, property upkeep, utilities, loans, taxes, medical costs, subscriptions, security, transport, dependents.',
+    'Keep baseline items conservative and lore-grounded: usually 1-4 income items and 1-6 expense items. Do not invent a detailed budget when the card gives no support.',
+    'Recurring income describes expected periodic cashflow. Do not add recurring income to balance again every message unless the scene advances to payday, rent collection, profit payout, or another explicit new accounting period.',
     'For wealthy, high-status, business-owning, royal, celebrity, executive, or otherwise resource-rich characters, initialize and maintain a balance appropriate to their accessible spending money, not their total net worth.',
     'If a previous draft/default wallet contradicts clear lore (for example a wealthy character going negative after ordinary luxury spending), correct the wallet to a plausible balance and explain the correction briefly in note.',
     'For high-status or wealthy characters, scale income, reserves, gifts, staff, property upkeep, luxury purchases, and recurring obligations realistically when the story supports it.',
@@ -400,7 +405,7 @@ function itemRows(items, type, currency, text) {
           <div class="cw-row-title"><b>${escapeHtml(item.name)}</b></div>
           <div class="cw-row-meta">
             <span>${escapeHtml(money(item.amount, currency))}</span>
-            ${type === 'expense' && item.recurring ? '<span class="cw-pill">recurring</span>' : ''}
+            ${item.recurring ? '<span class="cw-pill">recurring</span>' : ''}
             ${overdue}
           </div>
         </div>
