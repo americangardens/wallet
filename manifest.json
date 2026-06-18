@@ -1,16 +1,14 @@
 {
   "display_name": "Character Wallet",
-  "loading_order": 50,
+  "loading_order": 100,
   "requires": [],
   "optional": [],
-  "dependencies": [],
   "js": "index.js",
   "css": "style.css",
   "author": "Codex + Denis",
   "version": "0.1.0",
   "homePage": "https://github.com/americangardens/wallet",
   "auto_update": true,
-  "minimum_client_version": "1.12.0",
   "generate_interceptor": "charWalletInterceptor",
   "hooks": {
     "disable": "charWalletOnDisable"
