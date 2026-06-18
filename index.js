@@ -20,7 +20,6 @@ const DEFAULT_STATE = Object.freeze({
   living_wage: 1000,
   expenses: [],
   income: [],
-  note: '',
   initialized: false,
   appliedUpdates: [],
   debugLog: [],
@@ -37,8 +36,6 @@ const LABELS = Object.freeze({
     minimum: 'Минимум',
     expenses: 'Расходы',
     income: 'Доходы',
-    note: 'Заметка',
-    noNote: 'Кошелек персонажа ожидает первое обновление.',
     reset: 'Сбросить',
     collapse: 'Свернуть',
     open: 'Открыть',
@@ -53,8 +50,6 @@ const LABELS = Object.freeze({
     minimum: 'Minimum',
     expenses: 'Expenses',
     income: 'Income',
-    note: 'Note',
-    noNote: 'Character wallet is waiting for the first update.',
     reset: 'Reset',
     collapse: 'Collapse',
     open: 'Open',
@@ -209,7 +204,6 @@ function normalizeWallet(raw) {
       recurring: item.recurring === true,
       icon: String(item.icon || '+').slice(0, 8),
     })) : [],
-    note: String(source.note || '').slice(0, 320),
     initialized: true,
   };
 }
@@ -257,7 +251,6 @@ function mergeWalletState(target, update) {
   target.living_wage = update.living_wage;
   target.expenses = update.expenses;
   target.income = update.income;
-  target.note = update.note;
   target.initialized = true;
 }
 
@@ -323,7 +316,6 @@ function buildPrompt() {
     living_wage: state.living_wage,
     expenses: state.expenses,
     income: state.income,
-    note: state.note,
   });
   const stateInstruction = hasEstablishedWallet
     ? `Current established character wallet state: ${stateJson}`
@@ -335,8 +327,8 @@ function buildPrompt() {
     `${languageRule} Currency must match the story setting, not the UI language.`,
     stateInstruction,
     'After every assistant reply, append exactly one compact JSON object inside this tag at the very end:',
-    '<char_wallet_state><!-- {"owner":"{{char}}","balance":0,"currency":"$","living_wage":1000,"expenses":[],"income":[],"note":""} --></char_wallet_state>',
-    'Required JSON keys: owner, balance, currency, living_wage, expenses, income, note.',
+    '<char_wallet_state><!-- {"owner":"{{char}}","balance":0,"currency":"$","living_wage":1000,"expenses":[],"income":[]} --></char_wallet_state>',
+    'Required JSON keys: owner, balance, currency, living_wage, expenses, income.',
     'Expense item keys: id, name, amount, paid, overdue_days, penalty, recurring, icon.',
     'Income item keys: id, name, amount, received, recurring, icon.',
     'Track only money that belongs to, is owed by, is owed to, is paid by, or is received by {{char}}.',
@@ -349,7 +341,7 @@ function buildPrompt() {
     'Keep baseline items conservative and lore-grounded: usually 1-4 income items and 1-6 expense items. Do not invent a detailed budget when the card gives no support.',
     'Recurring income describes expected periodic cashflow. Do not add recurring income to balance again every message unless the scene advances to payday, rent collection, profit payout, or another explicit new accounting period.',
     'For wealthy, high-status, business-owning, royal, celebrity, executive, or otherwise resource-rich characters, initialize and maintain a balance appropriate to their accessible spending money, not their total net worth.',
-    'If a previous draft/default wallet contradicts clear lore (for example a wealthy character going negative after ordinary luxury spending), correct the wallet to a plausible balance and explain the correction briefly in note.',
+    'If a previous draft/default wallet contradicts clear lore (for example a wealthy character going negative after ordinary luxury spending), correct the wallet to a plausible balance.',
     'For high-status or wealthy characters, scale income, reserves, gifts, staff, property upkeep, luxury purchases, and recurring obligations realistically when the story supports it.',
     'If {{char}} buys {{user}} a gift, pays for a date, purchases jewelry, covers a bill, or spends money to impress/protect/control someone, subtract it from {{char}}\'s balance and add/update an expense item.',
     'Keep recurring obligations unless the story explicitly ends them. Increase overdue_days and penalty when unpaid recurring expenses are neglected.',
@@ -442,7 +434,6 @@ function renderPanel() {
   const status = getStatus(state, text);
   const expenseTotal = sumItems(state.expenses);
   const incomeTotal = sumItems(state.income);
-  const noteText = state.note === LABELS.ru.noNote ? text.noNote : (state.note || text.noNote);
   const survivalRatio = state.living_wage > 0 ? Math.max(0, Math.min(100, Math.round((state.balance / state.living_wage) * 100))) : 100;
   const unpaidCount = state.expenses.filter(item => item.paid === false).length;
   const openIncomeCount = state.income.filter(item => item.received === false).length;
@@ -484,10 +475,6 @@ function renderPanel() {
         <section class="cw-section">
           <div class="cw-section-title">${escapeHtml(text.income)}</div>
           <div class="cw-list">${itemRows(state.income, 'income', state.currency, text)}</div>
-        </section>
-        <section class="cw-section">
-          <div class="cw-section-title">${escapeHtml(text.note)}</div>
-          <p class="cw-note">${escapeHtml(noteText)}</p>
         </section>
         ${debugTemplate(state.debugLog)}
         <div class="cw-actions">
