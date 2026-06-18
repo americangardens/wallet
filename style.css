@@ -60,8 +60,11 @@
   pointer-events: auto;
   width: 330px;
   max-width: calc(100vw - 62px);
+  height: auto;
   max-height: calc(100vh - 90px);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
   border: 1px solid rgba(255, 255, 255, 0.46);
   border-radius: 24px;
   background: var(--cw-bg);
@@ -233,12 +236,14 @@
 }
 
 #char-wallet-panel .cw-body {
-  max-height: calc(100vh - 282px);
+  min-height: 0;
+  flex: 1 1 auto;
   overflow: auto;
   padding: 0 10px 12px;
   display: grid;
   gap: 12px;
   scrollbar-width: thin;
+  overscroll-behavior: contain;
 }
 
 #char-wallet-panel .cw-section {
