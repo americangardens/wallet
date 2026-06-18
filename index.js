@@ -10,7 +10,7 @@ const DEFAULT_SETTINGS = Object.freeze({
   injectState: true,
   cleanupBlocks: true,
   showDebug: false,
-  language: 'ru',
+  language: 'auto',
 });
 
 const DEFAULT_STATE = Object.freeze({
@@ -20,9 +20,44 @@ const DEFAULT_STATE = Object.freeze({
   living_wage: 1000,
   expenses: [],
   income: [],
-  note: 'Кошелек персонажа ожидает первое обновление.',
+  note: '',
   appliedUpdates: [],
   debugLog: [],
+});
+
+const LABELS = Object.freeze({
+  ru: {
+    debt: 'Долг',
+    critical: 'Ниже минимума',
+    thin: 'Тонкий запас',
+    stable: 'Стабильно',
+    empty: 'Пока пусто',
+    balance: 'Баланс',
+    minimum: 'Минимум',
+    expenses: 'Расходы',
+    income: 'Доходы',
+    note: 'Заметка',
+    noNote: 'Кошелек персонажа ожидает первое обновление.',
+    reset: 'Сбросить',
+    collapse: 'Свернуть',
+    open: 'Открыть',
+  },
+  en: {
+    debt: 'In debt',
+    critical: 'Below minimum',
+    thin: 'Thin buffer',
+    stable: 'Stable',
+    empty: 'Nothing yet',
+    balance: 'Balance',
+    minimum: 'Minimum',
+    expenses: 'Expenses',
+    income: 'Income',
+    note: 'Note',
+    noNote: 'Character wallet is waiting for the first update.',
+    reset: 'Reset',
+    collapse: 'Collapse',
+    open: 'Open',
+  },
 });
 
 let initialized = false;
@@ -59,6 +94,28 @@ function numberOr(value, fallback = 0) {
   return Number.isFinite(number) ? number : fallback;
 }
 
+function getTextFromMessage(message) {
+  if (!message) return '';
+  return String(message.mes ?? message.message ?? message.text ?? '');
+}
+
+function detectRecentLanguage() {
+  const chat = Array.isArray(ctx().chat) ? ctx().chat : [];
+  const recentText = chat.slice(-12).map(getTextFromMessage).join('\n');
+  if (/[а-яА-ЯёЁ]/.test(recentText)) return 'ru';
+  return 'en';
+}
+
+function uiLanguage() {
+  const setting = getSettings().language;
+  if (setting === 'ru' || setting === 'en') return setting;
+  return detectRecentLanguage();
+}
+
+function labels() {
+  return LABELS[uiLanguage()] ?? LABELS.en;
+}
+
 function getSettings() {
   const context = ctx();
   if (!context.extensionSettings) return clone(DEFAULT_SETTINGS);
@@ -69,6 +126,7 @@ function getSettings() {
   for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
     if (!Object.hasOwn(settings, key)) settings[key] = value;
   }
+  if (!['auto', 'ru', 'en'].includes(settings.language)) settings.language = 'auto';
   return settings;
 }
 
@@ -178,11 +236,7 @@ function getLatestAssistantMessage(data) {
 }
 
 function getMessageText(message) {
-  if (!message) return '';
-  if (typeof message.mes === 'string') return message.mes;
-  if (typeof message.message === 'string') return message.message;
-  if (typeof message.text === 'string') return message.text;
-  return '';
+  return getTextFromMessage(message);
 }
 
 function setMessageText(message, value) {
@@ -252,8 +306,10 @@ function buildPrompt() {
   const settings = getSettings();
   const state = getState();
   const languageRule = settings.language === 'ru'
-    ? 'Use Russian for human-readable text fields unless the current roleplay clearly uses another language.'
-    : 'Use the current roleplay language for human-readable text fields.';
+    ? 'Use Russian for all human-readable text fields.'
+    : settings.language === 'en'
+      ? 'Use English for all human-readable text fields.'
+      : 'Use the same language as the current roleplay conversation for all human-readable text fields.';
   const stateJson = JSON.stringify({
     owner: state.owner,
     balance: state.balance,
@@ -306,19 +362,19 @@ function money(value, currency) {
   return `${formatted} ${currency}`;
 }
 
-function getStatus(state) {
-  if (state.balance < 0) return { key: 'debt', label: 'Долг', tone: 'danger' };
-  if (state.balance < state.living_wage) return { key: 'critical', label: 'Ниже минимума', tone: 'warn' };
-  if (state.balance < state.living_wage * 2) return { key: 'thin', label: 'Тонкий запас', tone: 'mid' };
-  return { key: 'stable', label: 'Стабильно', tone: 'ok' };
+function getStatus(state, text) {
+  if (state.balance < 0) return { key: 'debt', label: text.debt, tone: 'danger' };
+  if (state.balance < state.living_wage) return { key: 'critical', label: text.critical, tone: 'warn' };
+  if (state.balance < state.living_wage * 2) return { key: 'thin', label: text.thin, tone: 'mid' };
+  return { key: 'stable', label: text.stable, tone: 'ok' };
 }
 
 function sumItems(items, key = 'amount') {
   return items.reduce((total, item) => total + numberOr(item[key], 0), 0);
 }
 
-function itemRows(items, type, currency) {
-  if (!items.length) return '<div class="cw-empty">Пока пусто</div>';
+function itemRows(items, type, currency, text) {
+  if (!items.length) return `<div class="cw-empty">${escapeHtml(text.empty)}</div>`;
   return items.map((item, index) => {
     const done = type === 'expense' ? item.paid : item.received;
     const locked = type === 'expense' && item.recurring;
@@ -358,6 +414,7 @@ function debugTemplate(log) {
 
 function renderPanel() {
   const settings = getSettings();
+  const text = labels();
   let panel = document.getElementById(PANEL_ID);
   if (!panel) {
     panel = document.createElement('aside');
@@ -366,9 +423,10 @@ function renderPanel() {
   }
 
   const state = getState();
-  const status = getStatus(state);
+  const status = getStatus(state, text);
   const expenseTotal = sumItems(state.expenses);
   const incomeTotal = sumItems(state.income);
+  const noteText = state.note === LABELS.ru.noNote ? text.noNote : (state.note || text.noNote);
   const survivalRatio = state.living_wage > 0 ? Math.max(0, Math.min(100, Math.round((state.balance / state.living_wage) * 100))) : 100;
   const unpaidCount = state.expenses.filter(item => item.paid === false).length;
   const openIncomeCount = state.income.filter(item => item.received === false).length;
@@ -387,9 +445,9 @@ function renderPanel() {
         <div class="cw-card-shine"></div>
         <div class="cw-balance-grid">
           <div>
-            <span>Баланс</span>
+            <span>${escapeHtml(text.balance)}</span>
             <strong>${escapeHtml(money(state.balance, state.currency))}</strong>
-            <small>Минимум: ${escapeHtml(money(state.living_wage, state.currency))}</small>
+            <small>${escapeHtml(text.minimum)}: ${escapeHtml(money(state.living_wage, state.currency))}</small>
           </div>
           <div class="cw-coin" aria-hidden="true">${escapeHtml(state.currency.slice(0, 2))}</div>
         </div>
@@ -404,21 +462,21 @@ function renderPanel() {
       </div>
       <div class="cw-body">
         <section class="cw-section">
-          <div class="cw-section-title">Расходы</div>
-          <div class="cw-list">${itemRows(state.expenses, 'expense', state.currency)}</div>
+          <div class="cw-section-title">${escapeHtml(text.expenses)}</div>
+          <div class="cw-list">${itemRows(state.expenses, 'expense', state.currency, text)}</div>
         </section>
         <section class="cw-section">
-          <div class="cw-section-title">Доходы</div>
-          <div class="cw-list">${itemRows(state.income, 'income', state.currency)}</div>
+          <div class="cw-section-title">${escapeHtml(text.income)}</div>
+          <div class="cw-list">${itemRows(state.income, 'income', state.currency, text)}</div>
         </section>
         <section class="cw-section">
-          <div class="cw-section-title">Заметка</div>
-          <p class="cw-note">${escapeHtml(state.note || 'Нет заметки.')}</p>
+          <div class="cw-section-title">${escapeHtml(text.note)}</div>
+          <p class="cw-note">${escapeHtml(noteText)}</p>
         </section>
         ${debugTemplate(state.debugLog)}
         <div class="cw-actions">
-          <button type="button" data-action="reset">Сбросить</button>
-          <button type="button" data-action="toggle">${settings.panelOpen ? 'Свернуть' : 'Открыть'}</button>
+          <button type="button" data-action="reset">${escapeHtml(text.reset)}</button>
+          <button type="button" data-action="toggle">${settings.panelOpen ? escapeHtml(text.collapse) : escapeHtml(text.open)}</button>
         </div>
       </div>
     </div>`;
@@ -495,10 +553,11 @@ function renderSettings() {
           ${settingCheckbox('cw-inject-state', 'Use main generation profile')}
           ${settingCheckbox('cw-cleanup', 'Hide <char_wallet_state> blocks in chat')}
           ${settingCheckbox('cw-debug', 'Show debug log')}
-          <label for="cw-language">Prompt language preference</label>
+          <label for="cw-language">Language / Язык</label>
           <select id="cw-language" class="text_pole">
-            <option value="ru">Russian text fields</option>
-            <option value="auto">Current chat language</option>
+            <option value="auto">Auto / current chat</option>
+            <option value="ru">Русский</option>
+            <option value="en">English</option>
           </select>
         </div>
       </div>
